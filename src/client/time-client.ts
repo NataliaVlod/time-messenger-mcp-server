@@ -1,3 +1,5 @@
+import { readFileSync, statSync } from 'node:fs';
+import { basename } from 'node:path';
 import type {
   User,
   Team,
@@ -331,16 +333,68 @@ export class TimeClient {
 
   // ========== Posts ==========
 
+  async uploadFile(channelId: string, filePath: string): Promise<string> {
+    const st = statSync(filePath);
+    if (!st.isFile()) {
+      throw new Error(`Not a file: ${filePath}`);
+    }
+    const name = basename(filePath);
+    const form = new FormData();
+    form.append('channel_id', channelId);
+    form.append('files', new Blob([readFileSync(filePath)]), name);
+
+    const response = await fetchWithTimeout(
+      `${this.baseUrl}/api/v4/files?channel_id=${enc(channelId)}`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${this.token}`, 'User-Agent': userAgent() },
+        body: form,
+      }
+    );
+    if (!response.ok) {
+      const errorBody = (await response.json().catch(() => ({}))) as { message?: string };
+      throw new TimeApiError(
+        `File upload failed (${name}): ${response.status} ${errorBody.message || response.statusText}`,
+        response.status
+      );
+    }
+    const data = (await response.json()) as { file_infos?: { id: string }[] };
+    const id = data.file_infos?.[0]?.id;
+    if (!id) {
+      throw new Error(`Upload of ${name} returned no file id`);
+    }
+    return id;
+  }
+
+  async addReaction(postId: string, emojiName: string): Promise<void> {
+    const me = await this.getMe();
+    await this.request('POST', '/reactions', {
+      user_id: me.id,
+      post_id: postId,
+      emoji_name: emojiName.replace(/^:|:$/g, ''),
+      create_at: 0,
+    });
+  }
+
+  async getUsersByIds(userIds: string[]): Promise<User[]> {
+    return this.request<User[]>('POST', '/users/ids', userIds);
+  }
+
   async createPost(
     channelId: string,
     message: string,
-    rootId?: string
+    rootId?: string,
+    fileIds?: string[]
   ): Promise<Post> {
-    return this.request<Post>('POST', '/posts', {
+    const body: Record<string, unknown> = {
       channel_id: channelId,
       message,
       root_id: rootId || '',
-    });
+    };
+    if (fileIds && fileIds.length > 0) {
+      body.file_ids = fileIds;
+    }
+    return this.request<Post>('POST', '/posts', body);
   }
 
   async getPostsForChannel(

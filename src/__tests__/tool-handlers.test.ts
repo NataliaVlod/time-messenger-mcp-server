@@ -27,6 +27,9 @@ function createMockClient(overrides: Partial<TimeClient> = {}): TimeClient {
     getChannel: vi.fn().mockResolvedValue({ id: 'ch1', display_name: 'General' } as Channel),
     searchChannels: vi.fn().mockResolvedValue([] as Channel[]),
     getChannelUnread: vi.fn().mockResolvedValue({ channel_id: 'ch1', msg_count: 3, mention_count: 0 } as ChannelUnread),
+    uploadFile: vi.fn().mockResolvedValue('f1'),
+    addReaction: vi.fn().mockResolvedValue(undefined),
+    getUsersByIds: vi.fn().mockResolvedValue([]),
     createPost: vi.fn().mockResolvedValue({ id: 'p1', create_at: 1000 } as Post),
     getPostsForChannel: vi.fn().mockResolvedValue({ order: [], posts: {}, next_post_id: '', prev_post_id: '' } as PostList),
     getPostThread: vi.fn().mockResolvedValue({ order: [], posts: {}, next_post_id: '', prev_post_id: '' } as PostList),
@@ -63,6 +66,19 @@ describe('messageTools handlers', () => {
     const tool = findTool(messageTools, 'send_message');
     await tool.handler(client, { channel_id: 'ch1', message: 'Reply', root_id: 'p1' });
     expect(client.createPost).toHaveBeenCalledWith('ch1', 'Reply', 'p1');
+  });
+
+  it('send_message uploads file_paths and attaches file ids', async () => {
+    const tool = findTool(messageTools, 'send_message');
+    await tool.handler(client, { channel_id: 'ch1', message: 'See file', file_paths: ['/tmp/a.txt'] });
+    expect(client.uploadFile).toHaveBeenCalledWith('ch1', '/tmp/a.txt');
+    expect(client.createPost).toHaveBeenCalledWith('ch1', 'See file', undefined, ['f1']);
+  });
+
+  it('add_reaction calls addReaction', async () => {
+    const tool = findTool(messageTools, 'add_reaction');
+    await tool.handler(client, { post_id: 'p1', emoji_name: ':eyes:' });
+    expect(client.addReaction).toHaveBeenCalledWith('p1', ':eyes:');
   });
 
   it('send_message rejects missing channel_id', async () => {

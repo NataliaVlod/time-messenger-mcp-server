@@ -118,3 +118,32 @@ describe('formatSearchResult', () => {
     expect(result).toContain('Found 2 message(s)');
   });
 });
+
+describe('reactions in formatters', () => {
+  const post = {
+    id: 'p1', create_at: 1000, root_id: '', message: 'hello', channel_id: 'ch1',
+    metadata: { reactions: [
+      { user_id: 'u1', emoji_name: 'thumbsup' },
+      { user_id: 'u2', emoji_name: 'thumbsup' },
+      { user_id: 'u1', emoji_name: 'eyes' },
+    ] },
+  } as any;
+  const list = { order: ['p1'], posts: { p1: post }, next_post_id: '', prev_post_id: '' };
+
+  it('formatPostList shows id and grouped reactions with names', () => {
+    const out = formatPostList(list as any, { u1: 'ivan', u2: 'maria' });
+    expect(out).toContain('id:p1');
+    expect(out).toContain('Reactions: :thumbsup: x2 (ivan, maria); :eyes: x1 (ivan)');
+  });
+
+  it('falls back to user ids and omits the line when there are no reactions', () => {
+    expect(formatPostList(list as any)).toContain('(u1, u2)');
+    const bare = { ...list, posts: { p1: { ...post, metadata: {} } } };
+    expect(formatPostList(bare as any)).not.toContain('Reactions');
+  });
+
+  it('formatSearchResult shows reactions', () => {
+    expect(formatSearchResult({ order: ['p1'], posts: { p1: post } }, { u1: 'ivan', u2: 'maria' }))
+      .toContain('Reactions: :thumbsup: x2');
+  });
+});
